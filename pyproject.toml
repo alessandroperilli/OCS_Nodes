@@ -1,0 +1,14 @@
+[project]
+name = "Open Creative Studio Nodes"
+description = "A custom node suite to augment the capabilities of the [a/Open Creative Studio for ComfyUI](https://oc.studio/)."
+version = "1.0"
+license = {file = "LICENSE"}
+
+[project.urls]
+Repository = "https://github.com/alessandroperilli/OCS_Nodes"
+#  Used by Comfy Registry https://comfyregistry.org
+
+[tool.comfy]
+PublisherId = "perilli"
+DisplayName = "Open Creative Studio Nodes"
+Icon = "https://oc.studio/logo.png"
