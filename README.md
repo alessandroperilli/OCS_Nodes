@@ -66,6 +66,6 @@ Credit: This code is based on Kijai's `Image Batch Filter`, available [here](htt
 
 Install from ComfyUI Manager:
 
-<img width="1378" alt="Open Creative Studio Nodes in ComfyUI Manager" src="https://github.com/user-attachments/assets/0893fccf-3a5e-4726-a6e6-0e32c60d28b8" />
+<img width="1378" alt="Open Creative Studio Nodes in ComfyUI Manager" src="/Images/ComfyUI_Manager.png" />
 
 or clone this repo into the `/comfyui/custom_nodes` folder.
