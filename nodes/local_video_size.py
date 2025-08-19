@@ -8,9 +8,9 @@ class OCS_LocalVideoSize:
         video_presets = [
             "custom",
             "1360x768 [CogVideoX 1.5]",
-            "1280x720 [WanVideo 2.1, Hunyuan Video]",
+            "1280x720 [WanVideo 2.2, Hunyuan Video]",
             "960x544 [Hunyuan Video]",
-            "854x480 [WanVideo 2.1]",
+            "854x480 [WanVideo 2.2]",
             "720x480 [CogVideoX 1.5]",
         ]
 
@@ -47,9 +47,9 @@ class OCS_LocalVideoSize:
 
     _VIDEO_MAP = {
         "1360x768 [CogVideoX 1.5]": (1360, 768),
-        "1280x720 [WanVideo 2.1, Hunyuan Video]":  (1280, 720),
+        "1280x720 [WanVideo 2.2, Hunyuan Video]":  (1280, 720),
         "960x544 [Hunyuan Video]":  (960, 544),
-        "854x480 [WanVideo 2.1]":   (854, 480),
+        "854x480 [WanVideo 2.2]":   (854, 480),
         "720x480 [CogVideoX 1.5]":  (720, 480),
     }
 
