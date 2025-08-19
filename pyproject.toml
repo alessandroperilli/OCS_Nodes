@@ -1,5 +1,5 @@
 [project]
-name = "Open Creative Studio Nodes"
+name = "OCS_Nodes"
 description = "A custom node suite to augment the capabilities of the [a/Open Creative Studio for ComfyUI](https://oc.studio/)."
 version = "1.0"
 license = {file = "LICENSE"}
