@@ -6,9 +6,15 @@ A custom node suite to augment the capabilities of the [Open Creative Studio for
 
 ### Model Downloader v1
 
-This node downloads a file from a URL to a user-specified folder and returns the saved file path.
+This node assists you in downloading an AI model from the [Hugging Face repository](https://huggingface.co/perilli/OCS_Models) containing all models used by Open Creative Studio.
 
-It supports absolute or relative folders (creating the directory if missing), optional Bearer token authentication (you can reference an env var with `$VARNAME`), and reports download progress to ComfyUI when available.
+You can specify the folder where you want to save a model, and the name the model will have in your folder.
+
+If the folder structure you specify in the node doesn't exist, the node will create it for you. 
+
+If the file you specified already exists in the set folder, the node will ignore the request without errors.
+
+The node supports absolute or relative folders, optional Bearer token authentication (you can reference an env var with `$VARNAME`), and the ComfyUI download progress bar if you are using the most recent versions of ComfyUI.
 
 <img width="412" alt="Model Downloader v1" src="/Images/Model_Downloader_v1.png" />
 
