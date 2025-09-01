@@ -1,6 +1,6 @@
 # Open Creative Studio Nodes for ComfyUI
 
-A custom node suite to augment the capabilities of the [Open Creative Studio for ComfyUI](https://oc.studio).
+A custom node suite to augment the capabilities of [Open Creative Studio for ComfyUI](https://oc.studio).
 
 ## Nodes
 
