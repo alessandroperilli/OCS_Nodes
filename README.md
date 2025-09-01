@@ -4,6 +4,14 @@ A custom node suite to augment the capabilities of the [Open Creative Studio for
 
 ## Nodes
 
+### Model Downloader v1
+
+This node downloads a file from a URL to a user-specified folder and returns the saved file path.
+
+It supports absolute or relative folders (creating the directory if missing), optional Bearer token authentication (you can reference an env var with `$VARNAME`), and reports download progress to ComfyUI when available.
+
+<img width="412" alt="Model Downloader v1" src="/Images/Model_Downloader_v1.png" />
+
 ### Image Saver v1
 
 This node allows you to save the input image/s in various formats: `.png`, `.jpg`/`.jpeg`, and `.webp`.
