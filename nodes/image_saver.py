@@ -179,8 +179,23 @@ class OCS_ImageSaver:
     ):
 
         try:
+            exif_bytes = None
 
-            exif_dict = {}
+            if EXIF_UserComment:
+                try:
+                    # Store user comment with UTF-16BE encoding per EXIF spec
+                    exif_payload = {
+                        "Exif": {
+                            piexif.ExifIFD.UserComment: b"UNICODE\0" + EXIF_UserComment.encode("utf-16be")
+                        }
+                    }
+                    exif_bytes = piexif.dump(exif_payload)
+                except Exception as e:
+                    print(f"Error adding EXIF data: {e}")
+
+            save_kwargs = {}
+            if exif_bytes is not None:
+                save_kwargs["exif"] = exif_bytes
 
             if image_format == "png":
                 pnginfo = PngImagePlugin.PngInfo()
@@ -189,37 +204,16 @@ class OCS_ImageSaver:
                     workflow_json = json.dumps(extra_pnginfo["workflow"])
                     pnginfo.add_text("workflow", workflow_json)
 
-                if EXIF_UserComment:
-                        exif_dict['Exif'] = {piexif.ExifIFD.UserComment: b'UNICODE\0' + EXIF_UserComment.encode('utf-16be')}
-                        exif_bytes = piexif.dump(exif_dict)
-                
-                img.save(path, pnginfo=pnginfo, exif=exif_bytes)
+                img.save(path, pnginfo=pnginfo, **save_kwargs)
 
             elif image_format == "webp":
-                try:
-                    
-                    if EXIF_UserComment:
-                        exif_dict['Exif'] = {piexif.ExifIFD.UserComment: b'UNICODE\0' + EXIF_UserComment.encode('utf-16be')}
-                        exif_bytes = piexif.dump(exif_dict)
-                        
-                except Exception as e:
-                    print(f"Error adding EXIF data: {e}")
-
-                img.save(path, "WEBP", lossless=lossless_webp, quality=quality, exif=exif_bytes)
+                img.save(path, "WEBP", lossless=lossless_webp, quality=quality, **save_kwargs)
 
             elif image_format in {"jpg", "jpeg"}:
-                if EXIF_UserComment:
-                    try:
-                        exif_dict['Exif'] = {piexif.ExifIFD.UserComment: b'UNICODE\0' + EXIF_UserComment.encode('utf-16be')}
-                        exif_bytes = piexif.dump(exif_dict)
+                img.convert("RGB").save(path, quality=quality, **save_kwargs)
 
-                    except Exception as e:
-                        print(f"Error adding EXIF data: {e}")
-
-                img.convert("RGB").save(path, quality=quality, exif=exif_bytes)
-        
         except Exception as e:
-                print(f"Error saving image: {e}")
+            print(f"Error saving image: {e}")
 
 
 NODE_CLASS_MAPPINGS = {

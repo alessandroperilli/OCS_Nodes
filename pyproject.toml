@@ -1,7 +1,7 @@
 [project]
 name = "OCS_Nodes"
 description = "A custom node suite to augment the capabilities of the [a/Open Creative Studio for ComfyUI](https://oc.studio/)."
-version = "1.1.1"
+version = "1.1.2"
 license = {file = "LICENSE"}
 
 [project.urls]
@@ -11,4 +11,4 @@ Repository = "https://github.com/alessandroperilli/OCS_Nodes"
 [tool.comfy]
 PublisherId = "perilli"
 DisplayName = "Open Creative Studio Nodes"
-Icon = "https://download.oc.studio/OCS_Nodes_Logo.png"
+Icon = "https://assets.oc.studio/logos/ocs-nodes-logo.webp"
