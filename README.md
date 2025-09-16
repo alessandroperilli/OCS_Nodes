@@ -10,7 +10,7 @@ This node assists you in downloading an AI model from the [Hugging Face reposito
 
 You can specify the folder where you want to save a model, and the name the model will have in your folder.
 
-If the folder structure you specify in the node doesn't exist, the node will create it for you. 
+If the folder structure you specify in the node doesn't exist, the node will create it for you.
 
 If the file you specified already exists in the set folder, the node will ignore the request without errors.
 
@@ -75,6 +75,16 @@ If no input image remains after the filtering, the node outputs a new `image lis
 <img width="412" alt="Image List Filter v1" src="/Images/Image_List_Filter_v1.png" />
 
 Credit: This code is based on Kijai's `Image Batch Filter`, available [here](https://github.com/kijai/ComfyUI-KJNodes/). All credit to him.
+
+### Watermarker v1
+
+This node overlays a watermark image onto the bottom-right corner of a source image.
+
+`scale_percent` controls how large the watermark becomes relative to the source image dimensions (for example, `20` scales it to 20% of the width/height while keeping proportions). 
+
+`padding` defines how many pixels of spacing to leave between the watermark and the bottom/right edges.
+
+<img width="412" alt="Watermarker v1" src="/Images/Watermarker_v1.png" />
 
 ## Installation
 
