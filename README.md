@@ -4,19 +4,25 @@ A custom node suite to augment the capabilities of [Open Creative Studio for Com
 
 ## Nodes
 
-### Model Downloader v1
+### Image Grid 4x4 v1
 
-This node assists you in downloading an AI model from the [Hugging Face repository](https://huggingface.co/perilli/OCS_Models) containing all models used by Open Creative Studio.
+This node merges sixteen input images into a 4x4 grid using row and column-labeled inputs (`image_r1c1`, `image_r1c2`, …, `image_r4c4`).
 
-You can specify the folder where you want to save a model, and the name the model will have in your folder.
+Each row is concatenated horizontally and then stacked vertically, producing a single tiled output image.
 
-If the folder structure you specify in the node doesn't exist, the node will create it for you.
+<img width="412" alt="Image Grid 4x4 v1" src="/Images/Image_Grid_4x4_v1.png" />
 
-If the file you specified already exists in the set folder, the node will ignore the request without errors.
+Credit: This code is based on Kijai's `Image Grid Composite 3x3`, available [here](https://github.com/kijai/ComfyUI-KJNodes/). All credit to him.
 
-The node supports absolute or relative folders, optional Bearer token authentication (you can reference an env var with `$VARNAME`), and the ComfyUI download progress bar if you are using the most recent versions of ComfyUI.
+### Image List Filter v1
 
-<img width="412" alt="Model Downloader v1" src="/Images/Model_Downloader_v1.png" />
+This node takes an `image list` as input, filters out images smaller than either width or height, and outputs a new `image list` without the excluded images.
+
+If no input image remains after the filtering, the node outputs a new `image list` with the optional fallback image input.
+
+<img width="412" alt="Image List Filter v1" src="/Images/Image_List_Filter_v1.png" />
+
+Credit: This code is based on Kijai's `Image Batch Filter`, available [here](https://github.com/kijai/ComfyUI-KJNodes/). All credit to him.
 
 ### Image Saver v1
 
@@ -36,6 +42,14 @@ You can customize the filename with the following variables: `%seed%`, `%date%`,
 
 Credit: This code is based on receyuki's `SD Prompt Saver`, available [here](https://github.com/receyuki/comfyui-prompt-reader-node), and willmiao's `Save Image (LoraManager)`, available [here](https://github.com/willmiao/ComfyUI-Lora-Manager). All credit to them.
 
+### Image Size (Cloud Models) v1
+
+This node offers a list of preset resolutions for all hosted image generation models supported by OCS for ComfyUI: OpenAI GPT-Image-1.
+
+<img width="412" alt="Image Size (Cloud Models) v1" src="/Images/Cloud_Image_Size_v1.png" />
+
+<img width="412" alt="Image Size (Cloud Models) Menu v1" src="/Images/Cloud_Image_Size_Menu_v1.png" />
+
 ### Image Size (Local Models) v1
 
 This node offers a list of preset resolutions for all local image generation models supported by OCS for ComfyUI: Black Forest Labs FLUX.1, Stability AI Stable Diffusion 3.5, XL, and 1.5.
@@ -48,13 +62,19 @@ The user can also set a custom resolution.
 
 <img width="412" alt="Image Size (Local Models) Menu v1" src="/Images/Local_Image_Size_Menu_v1.png" />
 
-### Image Size (Cloud Models) v1
+### Model Downloader v1
 
-This node offers a list of preset resolutions for all hosted image generation models supported by OCS for ComfyUI: OpenAI GPT-Image-1.
+This node assists you in downloading an AI model from the [Hugging Face repository](https://huggingface.co/perilli/OCS_Models) containing all models used by Open Creative Studio.
 
-<img width="412" alt="Image Size (Cloud Models) v1" src="/Images/Cloud_Image_Size_v1.png" />
+You can specify the folder where you want to save a model, and the name the model will have in your folder.
 
-<img width="412" alt="Image Size (Cloud Models) Menu v1" src="/Images/Cloud_Image_Size_Menu_v1.png" />
+If the folder structure you specify in the node doesn't exist, the node will create it for you.
+
+If the file you specified already exists in the set folder, the node will ignore the request without errors.
+
+The node supports absolute or relative folders, optional Bearer token authentication (you can reference an env var with `$VARNAME`), and the ComfyUI download progress bar if you are using the most recent versions of ComfyUI.
+
+<img width="412" alt="Model Downloader v1" src="/Images/Model_Downloader_v1.png" />
 
 ### Video Size (Local Models) v1
 
@@ -66,21 +86,11 @@ The user can also set a custom resolution.
 
 <img width="412" alt="Video Size (Local Models) Menu v1" src="/Images/Local_Video_Size_Menu_v1.png" />
 
-### Image List Filter v1
-
-This node takes an `image list` as input, filters out images smaller than either width or height, and outputs a new `image list` without the excluded images.
-
-If no input image remains after the filtering, the node outputs a new `image list` with the optional fallback image input.
-
-<img width="412" alt="Image List Filter v1" src="/Images/Image_List_Filter_v1.png" />
-
-Credit: This code is based on Kijai's `Image Batch Filter`, available [here](https://github.com/kijai/ComfyUI-KJNodes/). All credit to him.
-
 ### Watermarker v1
 
 This node overlays a watermark image onto the bottom-right corner of a source image.
 
-`scale_percent` controls how large the watermark becomes relative to the source image dimensions (for example, `20` scales it to 20% of the width/height while keeping proportions). 
+`scale_percent` controls how large the watermark becomes relative to the source image dimensions (for example, `20` scales it to 20% of the width/height while keeping proportions).
 
 `padding` defines how many pixels of spacing to leave between the watermark and the bottom/right edges.
 
