@@ -42,6 +42,14 @@ You can customize the filename with the following variables: `%seed%`, `%date%`,
 
 Credit: This code is based on receyuki's `SD Prompt Saver`, available [here](https://github.com/receyuki/comfyui-prompt-reader-node), and willmiao's `Save Image (LoraManager)`, available [here](https://github.com/willmiao/ComfyUI-Lora-Manager). All credit to them.
 
+### First Not Empty v1
+
+This node returns the first input that holds data, falling back to the second input when the first is empty.
+
+<img width="412" alt="First Not Empty v1" src="/Images/First_Not_Empty_v1.png" />
+
+Credit: This code is based on rgthree's Any Switch, available [here](https://github.com/rgthree/rgthree-comfy). All credit to him.
+
 ### Image Size (Cloud Models) v1
 
 This node offers a list of preset resolutions for all hosted image generation models supported by OCS for ComfyUI: OpenAI GPT-Image-1.
