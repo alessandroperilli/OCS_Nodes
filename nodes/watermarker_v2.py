@@ -1,11 +1,11 @@
-import numpy as np
 import torch
-from PIL import Image
+import torch.nn.functional as F
 
 
 class OCS_WatermarkerV2:
     """Overlay a watermark onto the bottom-right corner of an image while
-    preserving the transparency of the watermark."""
+    preserving the transparency of the watermark by compositing directly in
+    torch with proper alpha math."""
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -50,40 +50,67 @@ class OCS_WatermarkerV2:
 
     # ------------------------------------------------------------------
     def _overlay_watermark(self, src_img_tensor, wm_tensor, scale_percent, padding):
-        src_pil = self._tensor_to_pil(src_img_tensor)
-        target_mode = src_pil.mode
-        src_rgba = src_pil.convert("RGBA")
+        if scale_percent <= 0.0:
+            return src_img_tensor
 
-        wm_rgba = self._tensor_to_pil(wm_tensor).convert("RGBA")
+        src = src_img_tensor.to(dtype=torch.float32)
+        wm = wm_tensor.to(dtype=torch.float32)
 
-        if scale_percent <= 0.0 or wm_rgba.width == 0 or wm_rgba.height == 0:
-            composite = src_rgba
+        src_h, src_w = src.shape[0], src.shape[1]
+        wm_h, wm_w = wm.shape[0], wm.shape[1]
+
+        if wm_h == 0 or wm_w == 0:
+            return src_img_tensor
+
+        src_rgb, src_alpha, src_extra = self._split_channels(src)
+        wm_rgba = self._ensure_rgba(wm)
+
+        scale_ratio = max(scale_percent / 100.0, 0.0)
+        target_w = max(1, int(round(src_w * scale_ratio)))
+        target_h = max(1, int(round(src_h * scale_ratio)))
+
+        width_ratio = target_w / wm_w
+        height_ratio = target_h / wm_h
+        resize_ratio = min(width_ratio, height_ratio)
+
+        new_w = max(1, int(round(wm_w * resize_ratio)))
+        new_h = max(1, int(round(wm_h * resize_ratio)))
+
+        resized = self._resize_rgba(wm_rgba, new_w, new_h)
+
+        x = max(0, src_w - new_w - padding)
+        y = max(0, src_h - new_h - padding)
+
+        paste_w = min(new_w, src_w - x)
+        paste_h = min(new_h, src_h - y)
+
+        if paste_w <= 0 or paste_h <= 0:
+            return src_img_tensor
+
+        blended_rgb = src_rgb.clone()
+        roi_rgb = blended_rgb[y : y + paste_h, x : x + paste_w, :]
+
+        wm_color = resized[:paste_h, :paste_w, :3]
+        wm_alpha = resized[:paste_h, :paste_w, 3:4]
+
+        roi_rgb.mul_(1.0 - wm_alpha).add_(wm_color * wm_alpha)
+        blended_rgb[y : y + paste_h, x : x + paste_w, :] = roi_rgb
+
+        if src_alpha is not None:
+            blended_alpha = src_alpha.clone()
+            roi_alpha = blended_alpha[y : y + paste_h, x : x + paste_w, :]
+            roi_alpha.mul_(1.0 - wm_alpha).add_(wm_alpha)
+            blended_alpha[y : y + paste_h, x : x + paste_w, :] = roi_alpha
         else:
-            scale_ratio = max(scale_percent / 100.0, 0.0)
-            target_w = max(1, int(round(src_rgba.width * scale_ratio)))
-            target_h = max(1, int(round(src_rgba.height * scale_ratio)))
+            blended_alpha = None
 
-            width_ratio = target_w / wm_rgba.width
-            height_ratio = target_h / wm_rgba.height
-            resize_ratio = min(width_ratio, height_ratio)
+        result = blended_rgb
+        if blended_alpha is not None:
+            result = torch.cat([result, blended_alpha], dim=-1)
+        if src_extra is not None:
+            result = torch.cat([result, src_extra], dim=-1)
 
-            new_w = max(1, int(round(wm_rgba.width * resize_ratio)))
-            new_h = max(1, int(round(wm_rgba.height * resize_ratio)))
-
-            resized = self._resize_with_alpha(wm_rgba, (new_w, new_h))
-
-            watermark_layer = Image.new("RGBA", src_rgba.size, (0, 0, 0, 0))
-
-            x = max(0, src_rgba.width - new_w - padding)
-            y = max(0, src_rgba.height - new_h - padding)
-
-            mask = resized.split()[3]
-            watermark_layer.paste(resized, (x, y), mask)
-
-            composite = Image.alpha_composite(src_rgba, watermark_layer)
-
-        final_img = composite.convert(target_mode)
-        return self._pil_to_tensor(final_img, src_img_tensor.dtype)
+        return result.clamp(0.0, 1.0).to(dtype=src_img_tensor.dtype)
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -92,7 +119,7 @@ class OCS_WatermarkerV2:
             img = img[0]
         if img.ndim == 3:
             img = img.unsqueeze(0)
-        if img.dtype != torch.float32:
+        if not torch.is_floating_point(img):
             img = img.float()
         return img
 
@@ -103,55 +130,77 @@ class OCS_WatermarkerV2:
         return caster(value)
 
     @staticmethod
-    def _tensor_to_pil(img_tensor):
-        array = img_tensor.detach().cpu().clamp(0, 1).numpy()
-        array = (array * 255.0).round().astype(np.uint8)
-        if array.ndim == 3 and array.shape[-1] in (1, 3, 4):
-            return Image.fromarray(array)
-        raise ValueError("Unsupported image tensor shape for conversion to PIL image")
+    def _split_channels(img_tensor: torch.Tensor):
+        channels = img_tensor.shape[-1]
+        if channels == 1:
+            rgb = img_tensor.repeat(1, 1, 3)
+            alpha = None
+            extra = None
+        elif channels == 2:
+            rgb = img_tensor[..., :1].repeat(1, 1, 3)
+            alpha = img_tensor[..., 1:2]
+            extra = None
+        elif channels == 3:
+            rgb = img_tensor[..., :3]
+            alpha = None
+            extra = None
+        elif channels >= 4:
+            rgb = img_tensor[..., :3]
+            alpha = img_tensor[..., 3:4]
+            extra = img_tensor[..., 4:] if channels > 4 else None
+        else:
+            raise ValueError("Unsupported number of channels in source image")
+        return rgb, alpha, extra
 
     @staticmethod
-    def _pil_to_tensor(image, dtype):
-        array = np.asarray(image, dtype=np.float32)
-        if array.ndim == 2:
-            array = np.expand_dims(array, axis=-1)
-        array = array / 255.0
-        tensor = torch.from_numpy(array)
-        return tensor.to(dtype)
+    def _ensure_rgba(wm_tensor: torch.Tensor):
+        channels = wm_tensor.shape[-1]
+        if channels == 4:
+            return wm_tensor
+        if channels == 3:
+            alpha = torch.ones_like(wm_tensor[..., :1])
+            return torch.cat([wm_tensor, alpha], dim=-1)
+        if channels == 1:
+            repeated = wm_tensor.repeat(1, 1, 3)
+            alpha = torch.ones_like(wm_tensor[..., :1])
+            return torch.cat([repeated, alpha], dim=-1)
+        raise ValueError("Unsupported number of channels in watermark image")
 
     @staticmethod
-    def _resize_with_alpha(image: Image.Image, size: tuple[int, int]) -> Image.Image:
-        if image.size == size:
-            return image.copy()
+    def _resize_rgba(wm: torch.Tensor, new_w: int, new_h: int):
+        height, width = wm.shape[0], wm.shape[1]
+        if width == new_w and height == new_h:
+            return wm
 
-        rgba = np.array(image, dtype=np.float32)
-        rgb = rgba[..., :3]
-        alpha = rgba[..., 3]
+        rgba = wm.clamp(0.0, 1.0)
+        color = rgba[..., :3] * rgba[..., 3:4]
+        alpha = rgba[..., 3:4]
 
-        alpha_norm = alpha / 255.0
-        premultiplied = rgb * alpha_norm[..., None]
+        color_4d = color.permute(2, 0, 1).unsqueeze(0)
+        alpha_4d = alpha.permute(2, 0, 1).unsqueeze(0)
 
-        rgb_img = Image.fromarray(np.clip(premultiplied, 0, 255).astype(np.uint8), mode="RGB")
-        alpha_img = Image.fromarray(alpha.astype(np.uint8), mode="L")
-
-        rgb_resized = rgb_img.resize(size, Image.LANCZOS)
-        alpha_resized = alpha_img.resize(size, Image.LANCZOS)
-
-        rgb_resized_arr = np.asarray(rgb_resized, dtype=np.float32)
-        alpha_resized_arr = np.asarray(alpha_resized, dtype=np.float32)
-
-        alpha_norm_resized = alpha_resized_arr / 255.0
-        safe_alpha = np.clip(alpha_norm_resized, 1e-6, 1.0)
-
-        unpremultiplied = np.zeros((*size[::-1], 3), dtype=np.float32)
-        mask = alpha_norm_resized > 1e-6
-        unpremultiplied[mask] = rgb_resized_arr[mask] / safe_alpha[mask, None]
-
-        result = np.dstack(
-            [np.clip(unpremultiplied, 0, 255).astype(np.uint8), alpha_resized_arr.astype(np.uint8)]
+        resized_color = F.interpolate(
+            color_4d, size=(new_h, new_w), mode="bicubic", align_corners=False
+        )
+        resized_alpha = F.interpolate(
+            alpha_4d, size=(new_h, new_w), mode="bicubic", align_corners=False
         )
 
-        return Image.fromarray(result, mode="RGBA")
+        resized_alpha = resized_alpha.clamp(0.0, 1.0)
+        safe_alpha = resized_alpha.clamp_min(1e-6)
+
+        resized_color = torch.where(
+            resized_alpha > 1e-6,
+            resized_color / safe_alpha,
+            torch.zeros_like(resized_color),
+        )
+
+        resized_color = resized_color.clamp(0.0, 1.0)
+
+        color_hw = resized_color.squeeze(0).permute(1, 2, 0)
+        alpha_hw = resized_alpha.squeeze(0).permute(1, 2, 0)
+
+        return torch.cat([color_hw, alpha_hw], dim=-1)
 
 
 NODE_CLASS_MAPPINGS = {
