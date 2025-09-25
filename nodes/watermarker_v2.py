@@ -74,16 +74,22 @@ class OCS_WatermarkerV2:
         if scale_percent <= 0.0 or wm_h == 0 or wm_w == 0:
             return self._reassemble(src_rgb, src_alpha, src_extra, src_img_tensor)
 
-        scale_ratio = max(scale_percent / 100.0, 0.0)
-        target_w = max(1, int(round(src_w * scale_ratio)))
-        target_h = max(1, int(round(src_h * scale_ratio)))
+        base_available_w = max(1, src_w - padding * 2)
+        base_available_h = max(1, src_h - padding * 2)
 
-        width_ratio = target_w / wm_w
-        height_ratio = target_h / wm_h
-        resize_ratio = min(width_ratio, height_ratio)
+        requested_scale = max(scale_percent / 100.0, 0.0)
+        scale_from_width = requested_scale
 
-        new_w = max(1, int(round(wm_w * resize_ratio)))
-        new_h = max(1, int(round(wm_h * resize_ratio)))
+        max_scale_w = base_available_w / wm_w
+        max_scale_h = base_available_h / wm_h
+        max_scale = min(max_scale_w, max_scale_h)
+
+        effective_scale = min(scale_from_width, max_scale)
+        if effective_scale <= 0.0:
+            return self._reassemble(src_rgb, src_alpha, src_extra, src_img_tensor)
+
+        new_w = max(1, int(round(wm_w * effective_scale)))
+        new_h = max(1, int(round(wm_h * effective_scale)))
 
         wm_color_resized, wm_alpha_resized = self._resize_rgba(wm_rgba, new_h, new_w)
         wm_color_resized = wm_color_resized.clamp(0.0, 1.0)
@@ -174,12 +180,26 @@ class OCS_WatermarkerV2:
         color = rgba_tensor[..., :3].permute(2, 0, 1).unsqueeze(0)
         alpha = rgba_tensor[..., 3:4].permute(2, 0, 1).unsqueeze(0)
 
-        resized_color = F.interpolate(
-            color, size=(new_h, new_w), mode="bilinear", align_corners=False
-        )
+        alpha = alpha.clamp(0.0, 1.0)
+        premultiplied = color * alpha
+
         resized_alpha = F.interpolate(
-            alpha, size=(new_h, new_w), mode="bilinear", align_corners=False
+            alpha, size=(new_h, new_w), mode="bicubic", align_corners=False
         )
+        resized_color = F.interpolate(
+            premultiplied, size=(new_h, new_w), mode="bicubic", align_corners=False
+        )
+
+        eps = 1e-6
+        resized_alpha_clamped = resized_alpha.clamp(min=0.0, max=1.0)
+        safe_alpha = resized_alpha_clamped.clamp_min(eps)
+        unpremultiplied = resized_color / safe_alpha
+        unpremultiplied = torch.where(
+            resized_alpha_clamped > eps, unpremultiplied, torch.zeros_like(unpremultiplied)
+        )
+
+        resized_color = unpremultiplied.clamp(0.0, 1.0)
+        resized_alpha = resized_alpha_clamped
 
         resized_color = resized_color.squeeze(0).permute(1, 2, 0)
         resized_alpha = resized_alpha.squeeze(0).permute(1, 2, 0)
