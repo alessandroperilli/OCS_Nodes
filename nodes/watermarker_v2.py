@@ -179,12 +179,24 @@ class OCS_WatermarkerV2:
         color_4d = color.permute(2, 0, 1).unsqueeze(0)
         alpha_4d = alpha.permute(2, 0, 1).unsqueeze(0)
 
-        resized_color = F.interpolate(
-            color_4d, size=(new_h, new_w), mode="bicubic", align_corners=False
-        )
-        resized_alpha = F.interpolate(
-            alpha_4d, size=(new_h, new_w), mode="bicubic", align_corners=False
-        )
+        interpolate_kwargs = {
+            "size": (new_h, new_w),
+            "mode": "bicubic",
+            "align_corners": False,
+        }
+
+        try:
+            resized_color = F.interpolate(
+                color_4d, antialias=True, **interpolate_kwargs
+            )
+            resized_alpha = F.interpolate(
+                alpha_4d, antialias=True, **interpolate_kwargs
+            )
+        except TypeError:
+            # Older torch builds do not support the antialias flag. Fall back to the
+            # default behaviour instead of raising so the node remains compatible.
+            resized_color = F.interpolate(color_4d, **interpolate_kwargs)
+            resized_alpha = F.interpolate(alpha_4d, **interpolate_kwargs)
 
         resized_alpha = resized_alpha.clamp(0.0, 1.0)
         safe_alpha = resized_alpha.clamp_min(1e-6)
