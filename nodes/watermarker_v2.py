@@ -1,5 +1,12 @@
+import numpy as np
 import torch
-import torch.nn.functional as F
+from PIL import Image
+from typing import Optional
+
+try:
+    _LANCZOS = Image.Resampling.LANCZOS  # Pillow >= 9
+except AttributeError:  # pragma: no cover - Pillow < 9 compatibility
+    _LANCZOS = Image.LANCZOS
 
 
 class OCS_WatermarkerV2:
@@ -65,6 +72,9 @@ class OCS_WatermarkerV2:
         src_rgb, src_alpha, src_extra = self._split_channels(src)
         wm_rgba = self._ensure_rgba(wm)
 
+        base_image = self._tensor_to_pil_rgba(src_rgb, src_alpha)
+        watermark_image = self._tensor_to_pil_rgba(wm_rgba[..., :3], wm_rgba[..., 3:4])
+
         scale_ratio = max(scale_percent / 100.0, 0.0)
         target_w = max(1, int(round(src_w * scale_ratio)))
         target_h = max(1, int(round(src_h * scale_ratio)))
@@ -76,41 +86,29 @@ class OCS_WatermarkerV2:
         new_w = max(1, int(round(wm_w * resize_ratio)))
         new_h = max(1, int(round(wm_h * resize_ratio)))
 
-        resized = self._resize_rgba(wm_rgba, new_w, new_h)
+        if watermark_image.size != (new_w, new_h):
+            watermark_image = watermark_image.resize((new_w, new_h), _LANCZOS)
 
         x = max(0, src_w - new_w - padding)
         y = max(0, src_h - new_h - padding)
 
-        paste_w = min(new_w, src_w - x)
-        paste_h = min(new_h, src_h - y)
+        watermark_layer = Image.new("RGBA", base_image.size, (0, 0, 0, 0))
+        watermark_layer.paste(watermark_image, (x, y), watermark_image)
 
-        if paste_w <= 0 or paste_h <= 0:
-            return src_img_tensor
+        composited = Image.alpha_composite(base_image, watermark_layer)
 
-        blended_rgb = src_rgb.clone()
-        roi_rgb = blended_rgb[y : y + paste_h, x : x + paste_w, :]
+        composited_tensor = self._pil_rgba_to_tensor(composited)
 
-        wm_color = resized[:paste_h, :paste_w, :3]
-        wm_alpha = resized[:paste_h, :paste_w, 3:4]
+        result_rgb = composited_tensor[..., :3]
+        result_alpha = composited_tensor[..., 3:4] if src_alpha is not None else None
 
-        roi_rgb.mul_(1.0 - wm_alpha).add_(wm_color * wm_alpha)
-        blended_rgb[y : y + paste_h, x : x + paste_w, :] = roi_rgb
-
-        if src_alpha is not None:
-            blended_alpha = src_alpha.clone()
-            roi_alpha = blended_alpha[y : y + paste_h, x : x + paste_w, :]
-            roi_alpha.mul_(1.0 - wm_alpha).add_(wm_alpha)
-            blended_alpha[y : y + paste_h, x : x + paste_w, :] = roi_alpha
-        else:
-            blended_alpha = None
-
-        result = blended_rgb
-        if blended_alpha is not None:
-            result = torch.cat([result, blended_alpha], dim=-1)
+        result = result_rgb
+        if result_alpha is not None:
+            result = torch.cat([result, result_alpha], dim=-1)
         if src_extra is not None:
-            result = torch.cat([result, src_extra], dim=-1)
+            result = torch.cat([result, src_extra.detach().cpu()], dim=-1)
 
-        return result.clamp(0.0, 1.0).to(dtype=src_img_tensor.dtype)
+        return result.clamp(0.0, 1.0).to(dtype=src_img_tensor.dtype, device=src_img_tensor.device)
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -167,52 +165,36 @@ class OCS_WatermarkerV2:
         raise ValueError("Unsupported number of channels in watermark image")
 
     @staticmethod
-    def _resize_rgba(wm: torch.Tensor, new_w: int, new_h: int):
-        height, width = wm.shape[0], wm.shape[1]
-        if width == new_w and height == new_h:
-            return wm
-
-        rgba = wm.clamp(0.0, 1.0)
-        color = rgba[..., :3] * rgba[..., 3:4]
-        alpha = rgba[..., 3:4]
-
-        color_4d = color.permute(2, 0, 1).unsqueeze(0)
-        alpha_4d = alpha.permute(2, 0, 1).unsqueeze(0)
-
-        interpolate_kwargs = {
-            "size": (new_h, new_w),
-            "mode": "bicubic",
-            "align_corners": False,
-        }
-
-        try:
-            resized_color = F.interpolate(
-                color_4d, antialias=True, **interpolate_kwargs
-            )
-            resized_alpha = F.interpolate(
-                alpha_4d, antialias=True, **interpolate_kwargs
-            )
-        except TypeError:
-            # Older torch builds do not support the antialias flag. Fall back to the
-            # default behaviour instead of raising so the node remains compatible.
-            resized_color = F.interpolate(color_4d, **interpolate_kwargs)
-            resized_alpha = F.interpolate(alpha_4d, **interpolate_kwargs)
-
-        resized_alpha = resized_alpha.clamp(0.0, 1.0)
-        safe_alpha = resized_alpha.clamp_min(1e-6)
-
-        resized_color = torch.where(
-            resized_alpha > 1e-6,
-            resized_color / safe_alpha,
-            torch.zeros_like(resized_color),
+    def _tensor_to_pil_rgba(
+        rgb_tensor: torch.Tensor, alpha_tensor: Optional[torch.Tensor]
+    ) -> Image.Image:
+        rgb_np = (
+            rgb_tensor.clamp(0.0, 1.0)
+            .detach()
+            .cpu()
+            .numpy()
         )
+        rgb_bytes = (rgb_np * 255.0 + 0.5).astype(np.uint8)
 
-        resized_color = resized_color.clamp(0.0, 1.0)
+        if alpha_tensor is not None:
+            alpha_np = (
+                alpha_tensor.clamp(0.0, 1.0)
+                .detach()
+                .cpu()
+                .numpy()
+            )
+            alpha_bytes = (alpha_np * 255.0 + 0.5).astype(np.uint8)
+        else:
+            alpha_bytes = np.full(rgb_bytes.shape[:2] + (1,), 255, dtype=np.uint8)
 
-        color_hw = resized_color.squeeze(0).permute(1, 2, 0)
-        alpha_hw = resized_alpha.squeeze(0).permute(1, 2, 0)
+        rgba = np.concatenate([rgb_bytes, alpha_bytes], axis=-1)
+        return Image.fromarray(rgba, mode="RGBA")
 
-        return torch.cat([color_hw, alpha_hw], dim=-1)
+    @staticmethod
+    def _pil_rgba_to_tensor(image: Image.Image) -> torch.Tensor:
+        rgba = np.array(image.convert("RGBA"), dtype=np.float32) / 255.0
+        tensor = torch.from_numpy(rgba)
+        return tensor
 
 
 NODE_CLASS_MAPPINGS = {
