@@ -90,7 +90,7 @@ class OCS_NodesContribution:
         suites = self._installed_suites()
         if not suites:
             message = "No node suites detected."
-            return {"result": (message,), "ui": {"text": message}}
+            return {"result": (message,), "ui": {"text": (message,)}}
 
         class_to_suite: Dict[str, str] = {
             node_id: suite for suite, members in suites.items() for node_id in members
@@ -119,7 +119,7 @@ class OCS_NodesContribution:
         breakdown_lines = [f"{suite} - {count}" for suite, count in sorted_lines]
         breakdown = "\n".join(breakdown_lines)
 
-        details_lines = ["Loaded node classes:"]
+        details_lines = ["", "Loaded node classes:"]
         for suite in sorted(suites):
             members = sorted(suites[suite])
             details_lines.append(
@@ -128,9 +128,9 @@ class OCS_NodesContribution:
             for node_id in members:
                 details_lines.append(f"  • {node_id}")
 
-        ui_text = f"{breakdown}\n\n" + "\n".join(details_lines)
+        ui_lines = tuple(breakdown_lines + details_lines)
 
-        return {"result": (breakdown,), "ui": {"text": ui_text}}
+        return {"result": (breakdown,), "ui": {"text": ui_lines}}
 
 
 NODE_CLASS_MAPPINGS = {
