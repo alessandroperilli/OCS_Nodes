@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 import sys
-from typing import Dict, Iterable, Tuple
+from typing import Dict, Iterable
 
 Workflow = Dict[str, object]
 NodeDict = Dict[str, object]
@@ -14,10 +14,8 @@ class OCS_NodesContribution:
     """Summarise how many nodes in the active workflow come from each suite."""
 
     CATEGORY = "OCS Nodes"
-    RETURN_TYPES: Tuple[str, ...] = ("STRING",)
-    RETURN_NAMES: Tuple[str, ...] = ("breakdown",)
+    RETURN_TYPES = ()
     FUNCTION = "summarise"
-    OUTPUT_IS_LIST = (False,)
     OUTPUT_NODE = True
     DESCRIPTION = (
         "Counts the nodes used in the current workflow grouped by their source suite,"
@@ -30,6 +28,8 @@ class OCS_NodesContribution:
             "required": {},
             "hidden": {
                 "workflow": "WORKFLOW",
+                "unique_id": "UNIQUE_ID",
+                "extra_pnginfo": "EXTRA_PNGINFO",
             },
         }
 
@@ -86,11 +86,41 @@ class OCS_NodesContribution:
         return []
 
     # ------------------------------------------------------------------ main API
-    def summarise(self, workflow: Workflow | None = None):
+    @staticmethod
+    def _set_widget_text(
+        extra_pnginfo: Dict[str, object] | None,
+        unique_id: str | int | None,
+        value: str,
+    ) -> None:
+        if not extra_pnginfo or unique_id is None:
+            return
+
+        workflow_info = extra_pnginfo.get("workflow")
+        if not isinstance(workflow_info, dict):
+            return
+
+        nodes = workflow_info.get("nodes")
+        if not isinstance(nodes, list):
+            return
+
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            if str(node.get("id")) == str(unique_id):
+                node["widgets_values"] = [value]
+                break
+
+    def summarise(
+        self,
+        workflow: Workflow | None = None,
+        unique_id: str | int | None = None,
+        extra_pnginfo: Dict[str, object] | None = None,
+    ):
         suites = self._installed_suites()
         if not suites:
             message = "No node suites detected."
-            return {"result": (message,), "ui": {"text": (message,)}}
+            self._set_widget_text(extra_pnginfo, unique_id, message)
+            return {"ui": {"text": (message,)}}
 
         class_to_suite: Dict[str, str] = {
             node_id: suite for suite, members in suites.items() for node_id in members
@@ -117,8 +147,6 @@ class OCS_NodesContribution:
             counts.items(), key=lambda item: (-item[1], item[0].lower())
         )
         breakdown_lines = [f"{suite} - {count}" for suite, count in sorted_lines]
-        breakdown = "\n".join(breakdown_lines)
-
         details_lines = ["", "Loaded node classes:"]
         for suite in sorted(suites):
             members = sorted(suites[suite])
@@ -130,7 +158,8 @@ class OCS_NodesContribution:
 
         ui_text = "\n".join(breakdown_lines + details_lines)
 
-        return {"result": (breakdown,), "ui": {"text": (ui_text,)}}
+        self._set_widget_text(extra_pnginfo, unique_id, ui_text)
+        return {"ui": {"text": (ui_text,)}}
 
 
 NODE_CLASS_MAPPINGS = {
