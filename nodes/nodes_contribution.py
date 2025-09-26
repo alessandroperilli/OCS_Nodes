@@ -13,9 +13,11 @@ NodeDict = Dict[str, object]
 class OCS_NodesContribution:
     """Summarise how many nodes in the active workflow come from each suite."""
 
+    NAME = "Nodes Contribution"
     CATEGORY = "OCS Nodes"
-    RETURN_TYPES = ()
-    FUNCTION = "summarise"
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("text",)
+    FUNCTION = "main"
     OUTPUT_NODE = True
     DESCRIPTION = (
         "Counts the nodes used in the current workflow grouped by their source suite,"
@@ -110,17 +112,49 @@ class OCS_NodesContribution:
                 node["widgets_values"] = [value]
                 break
 
-    def summarise(
+    def _ensure_text_widget(
+        self,
+        extra_pnginfo: Dict[str, object] | None,
+        unique_id: str | int | None,
+    ) -> None:
+        """Guarantee a text widget exists so the node shows an empty panel on load."""
+
+        if not extra_pnginfo or unique_id is None:
+            return
+
+        workflow_info = extra_pnginfo.setdefault("workflow", {})
+        if not isinstance(workflow_info, dict):
+            return
+
+        nodes = workflow_info.setdefault("nodes", [])
+        if not isinstance(nodes, list):
+            return
+
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            if str(node.get("id")) == str(unique_id):
+                current = node.setdefault("widgets_values", [])
+                if isinstance(current, list):
+                    if not current:
+                        current.append("")
+                else:
+                    node["widgets_values"] = [""]
+                return
+
+    def main(
         self,
         workflow: Workflow | None = None,
         unique_id: str | int | None = None,
         extra_pnginfo: Dict[str, object] | None = None,
     ):
+        self._ensure_text_widget(extra_pnginfo, unique_id)
+
         suites = self._installed_suites()
         if not suites:
             message = "No node suites detected."
             self._set_widget_text(extra_pnginfo, unique_id, message)
-            return {"ui": {"text": (message,)}}
+            return {"ui": {"text": (message,)}, "result": (message,)}
 
         class_to_suite: Dict[str, str] = {
             node_id: suite for suite, members in suites.items() for node_id in members
@@ -159,7 +193,7 @@ class OCS_NodesContribution:
         ui_text = "\n".join(breakdown_lines + details_lines)
 
         self._set_widget_text(extra_pnginfo, unique_id, ui_text)
-        return {"ui": {"text": (ui_text,)}}
+        return {"ui": {"text": (ui_text,)}, "result": (ui_text,)}
 
 
 NODE_CLASS_MAPPINGS = {
