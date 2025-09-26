@@ -115,9 +115,21 @@ class OCS_NodesContribution:
         sorted_lines = sorted(
             counts.items(), key=lambda item: (-item[1], item[0].lower())
         )
-        breakdown = "\n".join(f"{suite} - {count}" for suite, count in sorted_lines)
+        breakdown_lines = [f"{suite} - {count}" for suite, count in sorted_lines]
+        breakdown = "\n".join(breakdown_lines)
 
-        return {"result": (breakdown,), "ui": {"text": breakdown}}
+        details_lines = ["Loaded node classes:"]
+        for suite in sorted(suites):
+            members = sorted(suites[suite])
+            details_lines.append(
+                f"{suite} ({len(members)} class{'es' if len(members) != 1 else ''})"
+            )
+            for node_id in members:
+                details_lines.append(f"  • {node_id}")
+
+        ui_text = f"{breakdown}\n\n" + "\n".join(details_lines)
+
+        return {"result": (breakdown,), "ui": {"text": ui_text}}
 
 
 NODE_CLASS_MAPPINGS = {
