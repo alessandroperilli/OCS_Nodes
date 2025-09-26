@@ -18,6 +18,7 @@ class OCS_NodesContribution:
     RETURN_NAMES: Tuple[str, ...] = ("breakdown",)
     FUNCTION = "summarise"
     OUTPUT_IS_LIST = (False,)
+    OUTPUT_NODE = True
     DESCRIPTION = (
         "Counts the nodes used in the current workflow grouped by their source suite,"
         " including suites that are installed but not referenced."
