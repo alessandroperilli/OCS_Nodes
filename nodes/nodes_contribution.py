@@ -128,9 +128,9 @@ class OCS_NodesContribution:
             for node_id in members:
                 details_lines.append(f"  • {node_id}")
 
-        ui_lines = tuple(breakdown_lines + details_lines)
+        ui_text = "\n".join(breakdown_lines + details_lines)
 
-        return {"result": (breakdown,), "ui": {"text": ui_lines}}
+        return {"result": (breakdown,), "ui": {"text": (ui_text,)}}
 
 
 NODE_CLASS_MAPPINGS = {
