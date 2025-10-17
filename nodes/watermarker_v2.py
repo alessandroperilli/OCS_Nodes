@@ -13,16 +13,12 @@ class OCS_WatermarkerV2:
                 "watermark_image": ("IMAGE",),
                 "watermark_mask": ("MASK",),
                 "corner": (
-                    "STRING",
-                    {
-                        "default": "bottom-right",
-                        "choices": [
-                            "bottom-right",
-                            "bottom-left",
-                            "top-right",
-                            "top-left",
-                        ],
-                    },
+                    (
+                        "bottom-right",
+                        "bottom-left",
+                        "top-right",
+                        "top-left",
+                    ),
                 ),
                 "corner_padding": ("INT", {"default": 25, "min": 0, "max": 8192}),
                 "percent_of_image": (
