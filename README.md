@@ -96,11 +96,13 @@ The user can also set a custom resolution.
 
 ### Watermarker v1
 
-This node overlays a watermark image onto the bottom-right corner of a source image.
+This node overlays a watermark image onto one of the four corners of a source image.
 
-`scale_percent` controls how large the watermark becomes relative to the source image dimensions (for example, `20` scales it to 20% of the width/height while keeping proportions).
+`corner_padding` defines how many pixels of spacing to leave between the watermark and the corner edges.
 
-`padding` defines how many pixels of spacing to leave between the watermark and the bottom/right edges.
+`percent_of_image` controls how large the watermark becomes relative to the source image dimensions (for example, `20` scales it to 20% of the width/height while keeping proportions).
+
+`opacity` defines the level of transparency the watermark image must have.
 
 <img width="412" alt="Watermarker v1" src="/Images/Watermarker_v1.png" />
 
