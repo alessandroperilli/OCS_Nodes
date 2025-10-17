@@ -3,6 +3,12 @@ import torch
 from PIL import Image, ImageEnhance
 
 
+try:  # Pillow 9.1+
+    RESAMPLING_LANCZOS = Image.Resampling.LANCZOS
+except AttributeError:  # Pillow < 9.1
+    RESAMPLING_LANCZOS = Image.LANCZOS
+
+
 class OCS_WatermarkerV2:
 
     @classmethod
@@ -134,7 +140,7 @@ class OCS_WatermarkerV2:
         new_w = max(1, int(round(watermark.width * resize_ratio)))
         new_h = max(1, int(round(watermark.height * resize_ratio)))
 
-        resized = watermark.resize((new_w, new_h), Image.LANCZOS)
+        resized = self._resize_with_quality(watermark, (new_w, new_h))
 
         if resized.mode != "RGBA":
             resized = resized.convert("RGBA")
@@ -154,6 +160,17 @@ class OCS_WatermarkerV2:
         composite.paste(resized, (x, y), resized)
 
         return composite.convert(src_mode)
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _resize_with_quality(image: Image.Image, size: tuple[int, int]) -> Image.Image:
+        """Resize with high-quality settings, guarding for Pillow versions."""
+
+        try:
+            return image.resize(size, RESAMPLING_LANCZOS, reducing_gap=2.0)
+        except TypeError:
+            # reducing_gap added in Pillow 9.1; fall back when unavailable.
+            return image.resize(size, RESAMPLING_LANCZOS)
 
     # ------------------------------------------------------------------
     def _resolve_corner_position(
