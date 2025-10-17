@@ -5,8 +5,10 @@ from PIL import Image, ImageEnhance
 
 try:  # Pillow 9.1+
     RESAMPLING_LANCZOS = Image.Resampling.LANCZOS
+    RESAMPLING_BOX = Image.Resampling.BOX
 except AttributeError:  # Pillow < 9.1
     RESAMPLING_LANCZOS = Image.LANCZOS
+    RESAMPLING_BOX = Image.BOX
 
 
 class OCS_WatermarkerV2:
@@ -200,7 +202,7 @@ class OCS_WatermarkerV2:
             mode="RGBA",
         )
 
-        resized = self._resize_with_quality(premultiplied_image, size)
+        resized = self._progressive_downscale(premultiplied_image, size)
 
         # Convert back to float for un-premultiplication.
         resized_arr = np.asarray(resized, dtype=np.float32)
@@ -220,6 +222,50 @@ class OCS_WatermarkerV2:
             np.clip(np.round(output), 0, 255).astype(np.uint8),
             mode="RGBA",
         )
+
+    # ------------------------------------------------------------------
+    def _progressive_downscale(
+        self,
+        image: Image.Image,
+        target_size: tuple[int, int],
+    ) -> Image.Image:
+        """Downscale using progressive box filtering followed by LANCZOS.
+
+        Using a multi-step approach with a box filter before the final
+        high-quality resize preserves more detail when shrinking large
+        watermarks.
+        """
+
+        target_w, target_h = target_size
+
+        if image.size == target_size:
+            return image.copy()
+
+        if target_w >= image.width and target_h >= image.height:
+            return self._resize_with_quality(image, target_size)
+
+        current = image
+
+        while True:
+            next_w = max(target_w, current.width // 2)
+            next_h = max(target_h, current.height // 2)
+
+            if next_w == current.width and next_h == current.height:
+                break
+
+            # If halving would overshoot in either dimension, stop early.
+            if next_w <= target_w and next_h <= target_h:
+                break
+
+            current = current.resize(
+                (next_w, next_h),
+                RESAMPLING_BOX,
+            )
+
+        if current.size != target_size:
+            current = self._resize_with_quality(current, target_size)
+
+        return current
 
     # ------------------------------------------------------------------
     def _resolve_corner_position(
