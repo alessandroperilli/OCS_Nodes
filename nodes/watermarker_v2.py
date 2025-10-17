@@ -140,7 +140,7 @@ class OCS_WatermarkerV2:
         new_w = max(1, int(round(watermark.width * resize_ratio)))
         new_h = max(1, int(round(watermark.height * resize_ratio)))
 
-        resized = self._resize_with_quality(watermark, (new_w, new_h))
+        resized = self._resize_rgba_with_premultiply(watermark, (new_w, new_h))
 
         if resized.mode != "RGBA":
             resized = resized.convert("RGBA")
@@ -171,6 +171,55 @@ class OCS_WatermarkerV2:
         except TypeError:
             # reducing_gap added in Pillow 9.1; fall back when unavailable.
             return image.resize(size, RESAMPLING_LANCZOS)
+
+    # ------------------------------------------------------------------
+    def _resize_rgba_with_premultiply(
+        self,
+        image: Image.Image,
+        size: tuple[int, int],
+    ) -> Image.Image:
+        """Resize an RGBA image using pre-multiplied alpha to avoid edge halos."""
+
+        if image.size == size:
+            return image.copy()
+
+        if image.mode != "RGBA":
+            image = image.convert("RGBA")
+
+        # Convert to numpy for accurate pre-multiplication in floating point.
+        arr = np.asarray(image, dtype=np.float32)
+        alpha = arr[..., 3:4]
+
+        # Normalize alpha to [0, 1] and pre-multiply RGB channels.
+        alpha_norm = alpha / 255.0
+        premultiplied = arr.copy()
+        premultiplied[..., :3] *= alpha_norm
+
+        premultiplied_image = Image.fromarray(
+            np.clip(np.round(premultiplied), 0, 255).astype(np.uint8),
+            mode="RGBA",
+        )
+
+        resized = self._resize_with_quality(premultiplied_image, size)
+
+        # Convert back to float for un-premultiplication.
+        resized_arr = np.asarray(resized, dtype=np.float32)
+        resized_alpha = resized_arr[..., 3:4]
+
+        # Avoid divide-by-zero by forcing a minimum alpha where necessary.
+        safe_alpha = np.where(resized_alpha > 0, resized_alpha, 1.0)
+        unpremultiplied_rgb = resized_arr[..., :3] * (255.0 / safe_alpha)
+
+        # Clamp RGB to valid bounds and zero-out fully transparent pixels.
+        unpremultiplied_rgb = np.clip(unpremultiplied_rgb, 0.0, 255.0)
+        unpremultiplied_rgb = np.where(resized_alpha > 0, unpremultiplied_rgb, 0.0)
+
+        output = np.concatenate([unpremultiplied_rgb, resized_alpha], axis=-1)
+
+        return Image.fromarray(
+            np.clip(np.round(output), 0, 255).astype(np.uint8),
+            mode="RGBA",
+        )
 
     # ------------------------------------------------------------------
     def _resolve_corner_position(
