@@ -1,43 +1,35 @@
-import os
-from pathlib import Path
-from typing import Iterable, Optional
-
 import numpy as np
 import torch
-from PIL import Image, ImageDraw, ImageEnhance, ImageFont
-
-import folder_paths
+from PIL import Image, ImageEnhance
 
 
 class OCS_WatermarkerV2:
 
     @classmethod
     def INPUT_TYPES(cls):
-        font_dir = cls._font_directory()
-        font_files: Iterable[str] = []
-
-        if font_dir is not None and font_dir.exists():
-            font_files = sorted(
-                f for f in os.listdir(font_dir) if (font_dir / f).is_file()
-            )
-
         return {
             "required": {
                 "source_image": ("IMAGE",),
-                "use_image_watermark": ("BOOLEAN", {"default": True}),
-                "scale_percent": (
+                "watermark_image": ("IMAGE",),
+                "watermark_mask": ("MASK",),
+                "corner": (
+                    "STRING",
+                    {
+                        "default": "bottom-right",
+                        "choices": (
+                            "top-left",
+                            "bottom-left",
+                            "top-right",
+                            "bottom-right",
+                        ),
+                    },
+                ),
+                "corner_padding": ("INT", {"default": 25, "min": 0, "max": 8192}),
+                "percent_of_image": (
                     "FLOAT",
                     {"default": 20.0, "min": 0.0, "max": 100.0, "step": 0.1},
                 ),
-                "padding": ("INT", {"default": 25, "min": 0, "max": 8192}),
                 "opacity": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.05}),
-            },
-            "optional": {
-                "watermark_image": ("IMAGE",),
-                "watermark_mask": ("MASK",),
-                "text": ("STRING", {"default": "enter text", "multiline": False}),
-                "text_color": ("STRING", {"default": "#FFFFFF", "multiline": False}),
-                "font_name": ((list(font_files),),),
             },
         }
 
@@ -50,79 +42,53 @@ class OCS_WatermarkerV2:
     def apply(
         self,
         source_image,
-        use_image_watermark,
-        scale_percent,
-        padding,
+        watermark_image,
+        watermark_mask,
+        corner,
+        corner_padding,
+        percent_of_image,
         opacity,
-        watermark_image=None,
-        watermark_mask=None,
-        text="enter text",
-        text_color="#FFFFFF",
-        font_name=None,
     ):
 
-        padding = self._extract_scalar(padding, int)
-        scale_percent = self._extract_scalar(scale_percent, float)
+        corner_padding = self._extract_scalar(corner_padding, int)
+        percent_of_image = self._extract_scalar(percent_of_image, float)
         opacity = float(self._extract_scalar(opacity, float))
-        use_image_watermark = bool(self._extract_scalar(use_image_watermark, bool))
+        corner = str(self._extract_scalar(corner, str)).strip().lower()
 
         src_tensor = self._ensure_tensor(source_image)
 
-        if use_image_watermark:
-            if watermark_image is None or watermark_mask is None:
-                raise ValueError("Both watermark_image and watermark_mask are required.")
+        wm_tensor = self._ensure_tensor(watermark_image)
+        mask_tensor = self._ensure_tensor(watermark_mask)
 
-            wm_tensor = self._ensure_tensor(watermark_image)
-            mask_tensor = self._ensure_tensor(watermark_mask)
+        if wm_tensor.shape[0] != mask_tensor.shape[0]:
+            # Allow mask batches of size 1 to be broadcast; otherwise sizes must match.
+            if mask_tensor.shape[0] != 1:
+                raise ValueError("watermark_image and watermark_mask batch sizes must match.")
 
-            if wm_tensor.shape[0] != mask_tensor.shape[0]:
-                # Allow mask batches of size 1 to be broadcast; otherwise sizes must match.
-                if mask_tensor.shape[0] != 1:
-                    raise ValueError("watermark_image and watermark_mask batch sizes must match.")
+        results = []
 
-            results = []
+        for idx, src_img in enumerate(src_tensor):
+            wm_idx = idx % wm_tensor.shape[0]
+            mask_idx = wm_idx if mask_tensor.shape[0] > 1 else 0
 
-            for idx, src_img in enumerate(src_tensor):
-                wm_idx = idx % wm_tensor.shape[0]
-                mask_idx = wm_idx if mask_tensor.shape[0] > 1 else 0
+            wm_img = self._tensor_to_pil(wm_tensor[wm_idx]).convert("RGB")
+            mask_img = self._tensor_to_pil(mask_tensor[mask_idx]).convert("L")
 
-                wm_img = self._tensor_to_pil(wm_tensor[wm_idx]).convert("RGB")
-                mask_img = self._tensor_to_pil(mask_tensor[mask_idx]).convert("L")
+            if wm_img.size != mask_img.size:
+                raise ValueError("watermark_image and watermark_mask must have the same resolution.")
 
-                if wm_img.size != mask_img.size:
-                    raise ValueError("watermark_image and watermark_mask must have the same resolution.")
+            rgba_watermark = self._merge_mask(wm_img, mask_img)
 
-                rgba_watermark = self._merge_mask(wm_img, mask_img)
+            result = self._add_image_watermark(
+                self._tensor_to_pil(src_img),
+                rgba_watermark,
+                opacity,
+                percent_of_image,
+                corner_padding,
+                corner,
+            )
 
-                result = self._add_image_watermark(
-                    self._tensor_to_pil(src_img),
-                    rgba_watermark,
-                    opacity,
-                    scale_percent,
-                    padding,
-                )
-
-                results.append(self._pil_to_tensor(result, src_img.dtype))
-
-        else:
-            font = self._load_font(font_name, scale_percent, src_tensor.shape)
-            rgb = self._hex_to_rgb(text_color)
-
-            results = []
-            for src_img in src_tensor:
-                src_pil = self._tensor_to_pil(src_img)
-
-                watermarked = self._add_text_watermark(
-                    src_pil,
-                    str(text),
-                    scale_percent,
-                    opacity,
-                    rgb,
-                    font,
-                    padding,
-                )
-
-                results.append(self._pil_to_tensor(watermarked, src_img.dtype))
+            results.append(self._pil_to_tensor(result, src_img.dtype))
 
         stacked = torch.stack(results, dim=0)
         return (stacked.to(device=src_tensor.device),)
@@ -142,18 +108,19 @@ class OCS_WatermarkerV2:
         return rgba
 
     # ------------------------------------------------------------------
-    @staticmethod
     def _add_image_watermark(
+        self,
         original: Image.Image,
         watermark: Image.Image,
         opacity: float,
-        scale_percent: float,
-        padding: int,
+        percent_of_image: float,
+        corner_padding: int,
+        corner: str,
     ) -> Image.Image:
         src_mode = original.mode
         base = original.convert("RGBA")
 
-        scale_ratio = max(scale_percent / 100.0, 0.0)
+        scale_ratio = max(percent_of_image / 100.0, 0.0)
 
         if scale_ratio <= 0.0:
             return original
@@ -180,8 +147,12 @@ class OCS_WatermarkerV2:
         alpha = ImageEnhance.Brightness(alpha).enhance(max(0.0, min(1.0, opacity)))
         resized.putalpha(alpha)
 
-        x = max(0, base.width - new_w - padding)
-        y = max(0, base.height - new_h - padding)
+        x, y = self._resolve_corner_position(
+            base.size,
+            resized.size,
+            corner_padding,
+            corner,
+        )
 
         composite = base.copy()
         composite.paste(resized, (x, y), resized)
@@ -189,90 +160,35 @@ class OCS_WatermarkerV2:
         return composite.convert(src_mode)
 
     # ------------------------------------------------------------------
-    def _add_text_watermark(
+    def _resolve_corner_position(
         self,
-        original: Image.Image,
-        text: str,
-        scale_percent: float,
-        opacity: float,
-        color: tuple[int, int, int],
-        font: ImageFont.FreeTypeFont,
+        base_size: tuple[int, int],
+        watermark_size: tuple[int, int],
         padding: int,
-    ) -> Image.Image:
-        src_mode = original.mode
-        base = original.convert("RGBA")
+        corner: str,
+    ) -> tuple[int, int]:
+        base_w, base_h = base_size
+        wm_w, wm_h = watermark_size
 
-        txt_layer = Image.new("RGBA", base.size, (255, 255, 255, 0))
-        draw = ImageDraw.Draw(txt_layer)
+        pad = max(0, padding)
 
-        font = font or self._derive_font(scale_percent, base.size)
-        alpha_value = int(round(max(0.0, min(1.0, opacity)) * 255))
+        normalized_corner = (corner or "bottom-right").lower()
+        if normalized_corner not in {
+            "top-left",
+            "bottom-left",
+            "top-right",
+            "bottom-right",
+        }:
+            normalized_corner = "bottom-right"
 
-        text_size = draw.textbbox((0, 0), text, font=font)
-        text_width = text_size[2] - text_size[0]
-        text_height = text_size[3] - text_size[1]
+        if normalized_corner == "top-left":
+            return (pad, pad)
+        if normalized_corner == "bottom-left":
+            return (pad, max(0, base_h - wm_h - pad))
+        if normalized_corner == "top-right":
+            return (max(0, base_w - wm_w - pad), pad)
 
-        x = max(0, base.width - text_width - padding)
-        y = max(0, base.height - text_height - padding)
-
-        draw.text((x, y), text, font=font, fill=(*color, alpha_value))
-
-        composite = Image.alpha_composite(base, txt_layer)
-        return composite.convert(src_mode)
-
-    # ------------------------------------------------------------------
-    @classmethod
-    def _font_directory(cls) -> Optional[Path]:
-        base = folder_paths.get_output_directory()
-        custom = Path(base).parent / "custom_nodes" / "ComfyUI-MingNodes" / "fonts"
-        return custom if custom.exists() else None
-
-    def _load_font(self, font_name, scale_percent, src_shape):
-        if not font_name:
-            return None
-
-        font_dir = self._font_directory()
-        if font_dir is None:
-            return None
-
-        font_path = font_dir / font_name
-        if not font_path.exists():
-            return None
-
-        size = self._font_size_from_scale(scale_percent, src_shape)
-        size = max(1, size)
-
-        try:
-            return ImageFont.truetype(font_path.as_posix(), size)
-        except OSError:
-            return None
-
-    def _derive_font(self, scale_percent: float, image_size):
-        fallback_size = max(1, int(round(min(image_size) * max(scale_percent / 100.0, 0.01))))
-        try:
-            return ImageFont.truetype("DejaVuSans.ttf", fallback_size)
-        except OSError:
-            return ImageFont.load_default()
-
-    @staticmethod
-    def _font_size_from_scale(scale_percent: float, src_shape) -> int:
-        if isinstance(src_shape, torch.Size):
-            height = src_shape[-3]
-            width = src_shape[-2]
-        else:
-            _, height, width, _ = src_shape
-        base_dim = min(width, height)
-        return int(round(base_dim * max(scale_percent / 100.0, 0.01)))
-
-    @staticmethod
-    def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
-        hex_color = hex_color.strip().lstrip("#")
-        if len(hex_color) != 6:
-            return (255, 255, 255)
-        r = int(hex_color[0:2], 16)
-        g = int(hex_color[2:4], 16)
-        b = int(hex_color[4:6], 16)
-        return (r, g, b)
+        return (max(0, base_w - wm_w - pad), max(0, base_h - wm_h - pad))
 
     @staticmethod
     def _ensure_tensor(img):
