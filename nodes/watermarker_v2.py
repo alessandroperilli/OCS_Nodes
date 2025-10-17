@@ -16,12 +16,12 @@ class OCS_WatermarkerV2:
                     "STRING",
                     {
                         "default": "bottom-right",
-                        "choices": (
-                            "top-left",
+                        "choices": [
+                            "bottom-right",
                             "bottom-left",
                             "top-right",
-                            "bottom-right",
-                        ),
+                            "top-left",
+                        ],
                     },
                 ),
                 "corner_padding": ("INT", {"default": 25, "min": 0, "max": 8192}),
