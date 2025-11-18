@@ -93,8 +93,16 @@ class OCS_ImageSaver:
             raise ValueError("No images provided to OCS_ImageSaver")
 
         # unpack widget scalars when Comfy wraps them in single-element lists
-        if isinstance(seed, list):
-            seed = seed[0]
+        seed = self._unwrap_scalar(seed)
+        filename = self._unwrap_scalar(filename)
+        path = self._unwrap_scalar(path)
+        image_format = self._unwrap_scalar(image_format)
+        lossless_webp = self._unwrap_scalar(lossless_webp)
+        jpg_webp_quality = self._unwrap_scalar(jpg_webp_quality)
+        date_format = self._unwrap_scalar(date_format)
+        time_format = self._unwrap_scalar(time_format)
+        embed_workflow = self._unwrap_scalar(embed_workflow)
+        EXIF_UserComment = self._unwrap_scalar(EXIF_UserComment)
 
         (
             full_output_folder,
@@ -169,6 +177,12 @@ class OCS_ImageSaver:
     @staticmethod
     def _single_or_list(lst):
         return lst[0] if len(lst) == 1 else lst
+
+    @staticmethod
+    def _unwrap_scalar(value):
+        if isinstance(value, (list, tuple)):
+            return value[0] if value else None
+        return value
 
     @staticmethod
     def _replace_tokens(template: str, mapping: dict) -> str:
