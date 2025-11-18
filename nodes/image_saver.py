@@ -13,6 +13,8 @@ import piexif
 
 class OCS_ImageSaver:
 
+    INPUT_IS_LIST = True
+
     def __init__(self):
         self.output_dir = folder_paths.get_output_directory()
         self.type = "output"
@@ -85,6 +87,15 @@ class OCS_ImageSaver:
         EXIF_UserComment: str = "",
         extra_pnginfo=None,
     ):
+
+        flat_images = self._flatten_images(images)
+        if not flat_images:
+            raise ValueError("No images provided to OCS_ImageSaver")
+
+        # unpack widget scalars when Comfy wraps them in single-element lists
+        if isinstance(seed, list):
+            seed = seed[0]
+
         (
             full_output_folder,
             filename_alt,
@@ -94,8 +105,8 @@ class OCS_ImageSaver:
         ) = folder_paths.get_save_image_path(
             self.prefix_append,
             self.output_dir,
-            images[0].shape[1],
-            images[0].shape[0],
+            flat_images[0].shape[1],
+            flat_images[0].shape[0],
         )
 
         output_folder = Path(full_output_folder)
@@ -110,7 +121,7 @@ class OCS_ImageSaver:
 
         saved_filenames, saved_paths, ui_images = [], [], []
 
-        for (batch_number, image) in enumerate(images):
+        for (batch_number, image) in enumerate(flat_images):
             var_map = base_vars.copy()
             var_map["%counter"] = f"{counter_base + batch_number:05}"
 
@@ -164,6 +175,33 @@ class OCS_ImageSaver:
         for k, v in mapping.items():
             template = template.replace(k, str(v))
         return template.strip("/")
+
+    @staticmethod
+    def _flatten_images(images):
+        """Normalise IMAGE, batch, or (possibly nested) lists into a flat list."""
+
+        if isinstance(images, torch.Tensor):
+            # single image or explicit batch tensor
+            return list(images) if images.ndim == 4 else [images]
+
+        flat = []
+
+        def _walk(item):
+            if isinstance(item, torch.Tensor):
+                flat.extend(list(item) if item.ndim == 4 else [item])
+            elif isinstance(item, (list, tuple)):
+                for sub in item:
+                    _walk(sub)
+            elif item is None:
+                # ignore empty placeholders often produced by optional inputs
+                return
+            else:
+                raise TypeError(
+                    "OCS_ImageSaver expects IMAGE tensors, batches, or lists thereof"
+                )
+
+        _walk(images)
+        return flat
 
     @staticmethod
     def process_image(
