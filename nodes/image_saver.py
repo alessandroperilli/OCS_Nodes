@@ -110,12 +110,21 @@ class OCS_ImageSaver:
 
         saved_filenames, saved_paths, ui_images = [], [], []
 
+        # Automatically add a counter suffix for batches if the user didn't specify %counter
+        auto_counter = ("%counter" not in filename) and len(images) > 1
+
         for (batch_number, image) in enumerate(images):
+            counter_value = counter_base + batch_number
+
             var_map = base_vars.copy()
-            var_map["%counter"] = f"{counter_base + batch_number:05}"
+            var_map["%counter"] = f"{counter_value:05}"
 
             rel_folder = self._replace_tokens(path, var_map)
             rel_filename = self._replace_tokens(filename, var_map)
+
+            # If user didn't use %counter, make sure filenames are still unique per image
+            if auto_counter:
+                rel_filename = f"{rel_filename}_{counter_value:05}"
 
             final_folder = output_folder / rel_folder
             final_folder.mkdir(parents=True, exist_ok=True)
